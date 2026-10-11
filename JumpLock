@@ -1,47 +1,52 @@
 local Players = game:GetService("Players")
 local RS = game:GetService("RunService")
+local UIS = game:GetService("UserInputService")
 local lp = Players.LocalPlayer
 local cam = workspace.CurrentCamera
 
 local enabled = true
-local SPIN_PER_JUMP = 0
-local spin = 0
-
-local function hookChar(char)
-    local hum = char:WaitForChild("Humanoid")
-    hum.Jumping:Connect(function(active)
-        if active and enabled then
-            spin = spin + math.rad(SPIN_PER_JUMP)
-        end
-    end)
-end
-if lp.Character then task.spawn(hookChar, lp.Character) end
-lp.CharacterAdded:Connect(hookChar)
+local SPIN_SPEED = 25   -- градусов за кадр (крути 10-45)
+local WALL_DIST = 4     -- на каком расстоянии от стены включается
 
 -- кнопка
 local gui = Instance.new("ScreenGui")
-gui.Name = "JumpLockGui"
+gui.Name = "WallHopGui"
 gui.ResetOnSpawn = false
 pcall(function() gui.Parent = (gethui and gethui()) or game:GetService("CoreGui") end)
 if not gui.Parent then gui.Parent = lp:WaitForChild("PlayerGui") end
 
 local btn = Instance.new("TextButton")
-btn.Size = UDim2.new(0, 130, 0, 40)
+btn.Size = UDim2.new(0, 150, 0, 40)
 btn.Position = UDim2.new(0, 10, 0.5, 0)
 btn.TextScaled = true
 btn.Parent = gui
 
 local function refresh()
-    btn.Text = enabled and "JumpLock: ВКЛ" or "JumpLock: ВЫКЛ"
+    btn.Text = enabled and "WallHop: ВКЛ" or "WallHop: ВЫКЛ"
     btn.BackgroundColor3 = enabled and Color3.fromRGB(60, 170, 80) or Color3.fromRGB(170, 60, 60)
 end
 refresh()
-
 btn.MouseButton1Click:Connect(function()
     enabled = not enabled
-    spin = 0
     refresh()
 end)
+
+local dirs = {
+    Vector3.new(1, 0, 0), Vector3.new(-1, 0, 0),
+    Vector3.new(0, 0, 1), Vector3.new(0, 0, -1),
+}
+
+local function nearWall(root, char)
+    local params = RaycastParams.new()
+    params.FilterType = Enum.RaycastFilterType.Exclude
+    params.FilterDescendantsInstances = {char}
+    for _, d in ipairs(dirs) do
+        if workspace:Raycast(root.Position, d * WALL_DIST, params) then
+            return true
+        end
+    end
+    return false
+end
 
 RS.RenderStepped:Connect(function()
     local char = lp.Character
@@ -55,10 +60,21 @@ RS.RenderStepped:Connect(function()
     end
 
     hum.AutoRotate = false
-    local look = cam.CFrame.LookVector
-    local flat = Vector3.new(look.X, 0, look.Z)
-    if flat.Magnitude > 0.01 then
-        root.CFrame = CFrame.new(root.Position, root.Position + flat)
-            * CFrame.Angles(0, spin, 0)
+    local holdingJump = UIS:IsKeyDown(Enum.KeyCode.Space) or hum.Jump
+    local airborne = hum:GetState() == Enum.HumanoidStateType.Freefall
+        or hum:GetState() == Enum.HumanoidStateType.Jumping
+
+    if holdingJump and nearWall(root, char) then
+        hum.Jump = true  -- авто-прыжок
+        if airborne then
+            root.CFrame = root.CFrame * CFrame.Angles(0, math.rad(SPIN_SPEED), 0)  -- прокрут
+        end
+    else
+        -- обычный шифт-лок: смотрим по камере
+        local look = cam.CFrame.LookVector
+        local flat = Vector3.new(look.X, 0, look.Z)
+        if flat.Magnitude > 0.01 then
+            root.CFrame = CFrame.new(root.Position, root.Position + flat)
+        end
     end
 end)
