@@ -1,0 +1,51 @@
+local Players = game:GetService("Players")
+local RS = game:GetService("RunService")
+local UIS = game:GetService("UserInputService")
+local lp = Players.LocalPlayer
+local cam = workspace.CurrentCamera
+
+local enabled = true
+local SPIN_PER_JUMP = 0   -- градусов доворота на каждый прыжок (0 = выкл)
+local TOGGLE_KEY = Enum.KeyCode.X
+
+local spin = 0
+
+local function hookChar(char)
+    local hum = char:WaitForChild("Humanoid")
+    hum.Jumping:Connect(function(active)
+        if active and enabled then
+            spin = spin + math.rad(SPIN_PER_JUMP)
+        end
+    end)
+end
+
+if lp.Character then task.spawn(hookChar, lp.Character) end
+lp.CharacterAdded:Connect(hookChar)
+
+RS.RenderStepped:Connect(function()
+    local char = lp.Character
+    local hum = char and char:FindFirstChildOfClass("Humanoid")
+    local root = char and char:FindFirstChild("HumanoidRootPart")
+    if not hum or not root then return end
+
+    if not enabled then
+        hum.AutoRotate = true
+        return
+    end
+
+    hum.AutoRotate = false
+    local look = cam.CFrame.LookVector
+    local flat = Vector3.new(look.X, 0, look.Z)
+    if flat.Magnitude > 0.01 then
+        root.CFrame = CFrame.new(root.Position, root.Position + flat)
+            * CFrame.Angles(0, spin, 0)
+    end
+end)
+
+UIS.InputBegan:Connect(function(input, gp)
+    if gp then return end
+    if input.KeyCode == TOGGLE_KEY then
+        enabled = not enabled
+        spin = 0
+    end
+end)
